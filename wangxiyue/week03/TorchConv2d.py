@@ -44,10 +44,10 @@ def loadData(batch_size):
     ])
     train_datasets = datasets.KMNIST( root='../data',train=True,download=True,transform=transform_train)
     test_datasets = datasets.KMNIST( root='../data',train=False,download=True,transform=ToTensor())
-    train_data = DataLoader(train_datasets, batch_size=batch_size, shuffle=True
-                             ,num_workers=8,pin_memory=True,persistent_workers = True,prefetch_factor =4)#,generator=torch.Generator(device=device))
-    test_data = DataLoader(test_datasets, batch_size=batch_size
-                            ,num_workers=8,pin_memory=True,persistent_workers = True,prefetch_factor = 4)#, generator=torch.Generator(device=device))
+    train_data = DataLoader(train_datasets, batch_size=batch_size, shuffle=True)
+                             #,num_workers=8,pin_memory=True,persistent_workers = True,prefetch_factor =4)#,generator=torch.Generator(device=device))
+    test_data = DataLoader(test_datasets, batch_size=batch_size)
+                            #,num_workers=8,pin_memory=True,persistent_workers = True,prefetch_factor = 4)#, generator=torch.Generator(device=device))
     return train_data, test_data
 
 
@@ -88,6 +88,7 @@ class Conv2dNet(nn.Module):
 
 
     def forward(self, x):
+        print(x.shape)
         y = self.conv2d_calc(x)
         return y
 
@@ -103,7 +104,7 @@ BATCH_SIZE =60
 Optimizer = torch.optim.SGD(model.parameters(), lr=Learning_Rate,momentum=0.85)
 
 ############################ 配置信息 ################################
-LOG_DIR = '../data/logs_LeakReLU'
+LOG_DIR = '../data/logs'
 if os.path.exists(LOG_DIR):
     shutil.rmtree(LOG_DIR)
 
