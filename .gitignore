@@ -1,2 +1,4 @@
 /.idea/
 /wangxiyue/data/
+__pycache__/
+*.pyc
