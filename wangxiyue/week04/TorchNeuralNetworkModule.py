@@ -17,13 +17,14 @@ import time
 
 import numpy as np
 import torch
+from PIL import Image
 from sklearn.datasets import fetch_olivetti_faces
 from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
-
+from torchvision.transforms import ToTensor
 
 
 def check_device():
@@ -54,34 +55,33 @@ def load_data_olivettiface():
 
 def data_loader(batch_size):
     transform_train = transforms.Compose([
-        transforms.RandomRotation(16),
-        transforms.RandomAffine(7, translate=(0.11, 0.13), shear=0.16),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomAffine(5, translate=(0.1, 0.1), shear=0.1),
         transforms.ToTensor()
     ])
     ######
-    transform_train = None
+    # transform_train = None
     ######
 
     xTrain, xTest, yTrain, yTest,imgTrain,imgTest = load_data_olivettiface()
+    print('load Dat ==> ', xTrain.shape, xTest.shape)
     print('load Img ==> ',imgTrain.shape,imgTest.shape)
-    train_datasets = OlivettiDataset(xTrain,yTrain , transform=transform_train)
-    test_datasets = OlivettiDataset(xTest, yTest , img = imgTest,toTensor=False)
+    train_datasets = OlivettiDataset(imgTrain,yTrain, transform=transform_train)
+    test_datasets = OlivettiDataset(imgTest, yTest ,transform=ToTensor())
 
     trainData = DataLoader(train_datasets, batch_size=batch_size, shuffle=True
                             ,generator=torch.Generator(device=device))
-    testData = DataLoader(test_datasets, batch_size=batch_size, shuffle=True
+    testData = DataLoader(test_datasets,batch_size=batch_size, shuffle=True
                             ,generator=torch.Generator(device=device))
+
     return trainData, testData
 
 class OlivettiDataset(Dataset):
-    def __init__(self,x,y,img = None,transform=None , toTensor=True):
-        # super(OlivettiDataset,self).__init__()
+    def __init__(self,x,y,transform=None ):
+        super(OlivettiDataset,self).__init__()
         self.x = x
         self.y = y
-        self.toTensor = toTensor
-        self.img = img
-        if self.toTensor==False:
-            print('self.toTensor==False  ==> ',x.shape)
+
         if transform is not None:
             self.transform = transform
         else :
@@ -91,51 +91,39 @@ class OlivettiDataset(Dataset):
         return len(self.x)
 
     def __getitem__(self,idx):
-        data = self.x[idx]
+        data =Image.fromarray(self.x[idx])
         target = self.y[idx]
-        img = None
-        if self.img is not None:
-            img = self.img[idx]
+        img = self.x[idx]
 
         if self.transform is not None:
-            data = self.transform(data[idx])
-            target=self.transform(target[idx])
-        if self.toTensor:
-            data =torch.tensor(data)
-            target = torch.tensor(target)
-            # if self.img is not None:
-            #     img = torch.tensor(img)
-        if self.img is not None:
-            return data, target, img
-        return data, target
+            data = self.transform(data)
+            data = data.flatten()
+
+        return data, target ,img
 
 class TorchNeuralNetworkModule(nn.Module):
     def __init__(self):
         super(TorchNeuralNetworkModule,self).__init__()
         self.calc_model = nn.Sequential(
 
-            nn.Linear(4096, 2048),
+            nn.Linear(4096, 4096),
 
-            # #归一化
-            # nn.BatchNorm1d(32768),
-            # nn.ReLU(),
-            # nn.Linear(32768, 8192),
-            #
-            # nn.BatchNorm1d(8192),
-            # nn.ReLU(),
-            # nn.Linear(8192, 2048),
-
-            nn.BatchNorm1d(2048),
+            #归一化
+            nn.BatchNorm1d(4096),
             nn.ReLU(),
-            nn.Linear(2048, 512),
+            nn.Linear(4096, 4096),
+
+            nn.BatchNorm1d(4096),
+            nn.ReLU(),
+            nn.Linear(4096, 512),
 
             nn.BatchNorm1d(512),
             nn.ReLU(),
-            nn.Linear(512, 128),
+            nn.Linear(512, 64),
 
-            nn.BatchNorm1d(128),
+            nn.BatchNorm1d(64),
             nn.ReLU(),
-            nn.Linear(128, 40),
+            nn.Linear(64, 40),
         )
 
     def forward(self, x):
@@ -168,12 +156,12 @@ if __name__ == '__main__':
     loss_fc = nn.CrossEntropyLoss()
     ############################# 超参 #################################
     Learning_Rate = 0.005
-    Epochs = 50
-    BATCH_SIZE = 64
+    Epochs = 300
+    BATCH_SIZE = 60
 
     #正则化 weight_decay = 1e-3
-    #Optimizer = torch.optim.SGD(model.parameters(), lr=Learning_Rate, weight_decay= 0.001 , momentum=0.9)
-    Optimizer = torch.optim.AdamW(model.parameters() )
+    Optimizer = torch.optim.SGD(model.parameters(), lr=Learning_Rate, weight_decay= 0.001 , momentum=0.9)
+    # Optimizer = torch.optim.AdamW(model.parameters() )
 
     ############################ 配置信息 ################################
     LOG_DIR = '../data/logs_olivetti'
@@ -187,15 +175,16 @@ if __name__ == '__main__':
     start_time = time.time()
     ############################# loaddata ########################
     train_data, test_data = data_loader(BATCH_SIZE)
-    train_data_size = len(train_data)
-    test_data_size = len(test_data)
 
     for epoch in range(Epochs):
         train_loss = []
         model.train()
-        for train_x, train_y in train_data:
+        acc = 0
+        train_data_size = 0
+        for train_x, train_y,t_img in train_data:# bachsize
             train_x = train_x.to(device)
             train_y = train_y.to(device)
+            print(train_x.shape)
             pred = model(train_x)
             loss = loss_fc(pred, train_y)
             model.zero_grad()
@@ -203,9 +192,13 @@ if __name__ == '__main__':
             Optimizer.step()
             train_loss.append(loss.item())
             total_train_step += 1
-            if total_train_step % 1 == 0:
+            train_data_size += train_y.size(0)
+            acc += (pred.argmax(1) == train_y).sum().item()
+            if total_train_step % 10 == 0:
                 end_time = time.time()
                 print(f'Epoch:{epoch + 1}/{Epochs} , 训练次数:{total_train_step} , Loss:{np.average(train_loss):.6f}, 耗时: {(end_time - start_time):.1f} 秒')
+        print(f'Epoch:{epoch} {color.GREEN}Acc:{acc/train_data_size*100:.3f}% {color.END}')
+        his_acc = acc / train_data_size
 
         model.eval()
         acc = 0
@@ -230,14 +223,22 @@ if __name__ == '__main__':
                 writer.add_image(f'Un_Pred_Img/epoch:{epoch + 1}/{index + 1}.img', imt,
                                      dataformats='HW', global_step=index + 1)
                 writer.flush()
-        print(f'acc={acc},test_data_size={test_data_size} | 测试集整体 ->{color.RED} Loss avg:{np.average(test_loss):.6f} , Acc :{(acc / test_data_size * 100):.3f}% {color.END}')
+        print(f'accSize={acc},test_data_size={test_data_size} | 测试集整体 ->{color.RED} Loss avg:{np.average(test_loss):.6f} , Acc :{(acc / test_data_size * 100):.3f}% {color.END}')
         print('')
         # writer.add_image('dont predict img',cant_img)
         writer.add_scalar('test_loss_avg', np.average(test_loss), total_test_step)
         writer.add_scalar('test_acc', acc / test_data_size, total_test_step)
         total_test_step += 1
-        torch.save(model, f'../data/model/torch_nn_module_{epoch + 1}.pth')
+
         writer.flush()
+
+        ###100 stop
+        now_acc = acc / test_data_size
+        if his_acc == now_acc == 1 :
+            print(f"Model  perfect {color.PURPLE} ؏؏☝ᖗ乛◡乛ᖘ☝؏؏ {color.END}")
+            torch.save(model, f'../data/model/torch_nn_module_{epoch + 1}.pth')
+            break
+
     writer.close()
 
 
