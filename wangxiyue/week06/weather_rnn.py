@@ -3,6 +3,8 @@
 #
 import csv
 
+import numpy as np
+import torch
 from torch import nn
 
 
@@ -43,7 +45,20 @@ class RNNModel(nn.Module):
 
 if __name__ == '__main__':
     # b t feature
+    #
     res = load_weather_data('../data/SummaryofWeather.csv')
-    print(f'station num = {len(res)}') # 159个站点
-    print(f'time len = {len(res[list(res.keys())[0]])} ')
+    sta_num = len(res) # 159个站点
+    print(list(res.values()))
+    date_num = len(res[list(res.keys())])
+    print(sta_num,date_num)
+    # sta , data , temp
+    data = torch.randn([sta_num,date_num,1],dtype=torch.float)
+    print(data.shape)
+
+    for i , sta in enumerate(res):
+        for ii ,date_step  in enumerate( res[sta]):
+            data[i,ii,0] = res[sta][date_step]
+
+
+
 
