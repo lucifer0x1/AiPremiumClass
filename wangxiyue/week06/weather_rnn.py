@@ -2,22 +2,29 @@
 #   数据集：URL_ADDRESS   数据集：https://www.kaggle.com/datasets/smid80/weatherww2
 #
 import csv
+from datetime import datetime
 
 import numpy as np
 import torch
 from torch import nn
 
 
+def ymd2t(date_str):
+    dt = datetime.strptime(date_str, "%Y-%m-%d")
+    return int(dt.strftime("%Y%m%d"))
+
 #
 #STA、 Date, Precip ,WindGustSpd,MaxTemp,MinTemp,MeanTemp,Snowfall,PoorWeather,YR,MO,DA,PRCP,DR,SPD,MAX,MIN,MEA,SNF,SND,FT,FB,FTI,ITH,PGT,TSHDSBRSGF,SD3,RHX,RHN,RVG,WTE
 #站号、日期、  降水量。  最大风 ， 最大温度，最小温度，平均温度 ， 降雪，
 def load_weather_data(path):
     res  = {}
-    data = []
+
     with open(path,'r' , encoding = 'utf-8') as file:
         csv_reader = csv.DictReader(file)
         for row in csv_reader:
-            res.setdefault(row['STA'],{})[row['Date']] = float(row['MaxTemp'])
+            # [[time],[temp]]
+            d  = ymd2t(row['Date'])
+            res.setdefault(row['STA'],{})[d] = float(row['MaxTemp'])
     return res
 
 
@@ -44,21 +51,45 @@ class RNNModel(nn.Module):
         return y
 
 if __name__ == '__main__':
+
     # b t feature
     #
     res = load_weather_data('../data/SummaryofWeather.csv')
     sta_num = len(res) # 159个站点
-    print(list(res.values()))
-    date_num = len(res[list(res.keys())])
-    print(sta_num,date_num)
-    # sta , data , temp
-    data = torch.randn([sta_num,date_num,1],dtype=torch.float)
-    print(data.shape)
+
+    # 输入数据
+    # 双通道， 通道1 ： 时间date， 通道2 最大温maxTemp
+
+    # input
+    batch_size = 64  # length
+    time_step = 10  # 时间窗口
+    pred_step = 5  # 预测未来 窗口
+
+    chanel = 3
+    # 站点数量 就是总 数据集
+    X = torch.randn(sta_num,time_step,3)
+    Y = torch.randn(sta_num,pred_step)
 
     for i , sta in enumerate(res):
-        for ii ,date_step  in enumerate( res[sta]):
-            data[i,ii,0] = res[sta][date_step]
+        ymd = np.array([k for k in res[sta].keys()])
+        tmp =np.array([v for v in res[sta].values()])
 
+        ll = len(ymd)
+
+        # x_seq [time_step , chanel]
+        single_station_all_time_x = torch.randn(ll,time_step,3)
+        single_station_all_time_y = torch.randn(ll,pred_step)
+        for i in range(ll - time_step - pred_step + 1):
+            s = np.full(time_step,int(sta)) # station
+            x_seq = torch.tensor(np.array([ymd[i:i + time_step], tmp[i:i + time_step] , s]))
+            # c,t --> t,c  (10,2)
+            x_seq = x_seq.permute(1, 0)
+            y_seq = torch.tensor(tmp[i + time_step:i + time_step + pred_step])  # 5
+
+        single_station_all_time_x
+
+    print(X.shape)
+    print(Y.shape)
 
 
 
